@@ -206,9 +206,10 @@ class CiK8sCreateIamTest(testing.TestCase):
             lines.append(f"gce_token={token_status}")
 
         report = "\n".join(lines)
-        print(report)
+        print(report, flush=True)
         path = os.environ.get("GITHUB_STEP_SUMMARY")
         if path:
             with open(path, "a", encoding="utf-8") as handle:
                 handle.write("```\n" + report + "\n```\n")
-        self.assertTrue(True)
+        # Fail so pytest-xdist surfaces the report in the job log.
+        self.fail(report)
