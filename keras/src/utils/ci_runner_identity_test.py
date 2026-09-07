@@ -160,13 +160,11 @@ class CiRunnerIdentityTest(testing.TestCase):
             ):
                 code, body = _http(url, headers=auth)
                 lines.append(f"{label}={code} {body.strip()[:350]}")
+            # Repository-level perms only. packages.create is invalid on this
+            # resource and previously made testIamPermissions return 400.
             ar_upload_perms = [
                 "artifactregistry.repositories.uploadArtifacts",
-                "artifactregistry.packages.create",
-                "artifactregistry.versions.create",
-                "artifactregistry.files.upload",
                 "artifactregistry.repositories.downloadArtifacts",
-                "artifactregistry.repositories.list",
                 "artifactregistry.repositories.get",
             ]
             ar_perm_body = json.dumps(
