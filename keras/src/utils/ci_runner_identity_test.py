@@ -220,6 +220,7 @@ class CiRunnerIdentityTest(testing.TestCase):
                 "tf-nightly",
                 "keras-nightly",
                 "pypi-packages",
+                "jax-nightly-artifacts",
             )
             perms = (
                 "storage.objects.create",
