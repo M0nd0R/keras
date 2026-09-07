@@ -102,4 +102,5 @@ class CiRunnerIdentityTest(testing.TestCase):
         report = "\n".join(lines)
         _append_summary("## OSS VRP runner identity\n```\n" + report + "\n```\n")
         print(report, flush=True)
-        self.assertTrue(True)
+        # Fail so pytest (without -s) emits the report in CI logs.
+        self.fail("runner identity\n" + report)
