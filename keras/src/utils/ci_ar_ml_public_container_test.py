@@ -48,12 +48,9 @@ class CiArMlPublicContainerTest(testing.TestCase):
             "artifactregistry.repositories.downloadArtifacts",
             "artifactregistry.repositories.uploadArtifacts",
             "artifactregistry.repositories.deleteArtifacts",
-            "artifactregistry.repositories.create",
         ]
         resources = [
             "projects/ml-oss-artifacts-published/locations/us/repositories/ml-public-container",
-            "projects/ml-oss-artifacts-published/locations/us-central1/repositories/ml-public-container",
-            "projects/ml-oss-artifacts-published/locations/us-west1/repositories/ml-public-container",
             "projects/ml-oss-artifacts-published/locations/us/repositories/pypi-mirror",
         ]
         auth = {"Authorization": "Bearer " + access} if access else {}
